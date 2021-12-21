@@ -90,7 +90,7 @@ void state_destroy() { /* nothing to do */
  */
 int inode_create(inode_type n_type) {
     for (int inumber = 0; inumber < INODE_TABLE_SIZE; inumber++) {
-        if ((inumber * (int) sizeof(allocation_state_t)) == 0) {
+        if ((inumber * (int) sizeof(allocation_state_t) % BLOCK_SIZE) == 0) {
             insert_delay(); // simulate storage access delay (to freeinode_ts)
         }
 
@@ -155,9 +155,6 @@ int inode_delete(int inumber) {
             return -1;
         }
     }
-
-    /* TODO: handle non-empty directories (either return error, or recursively
-     * delete children */
 
     return 0;
 }
