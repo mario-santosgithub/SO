@@ -210,7 +210,6 @@ int add_dir_entry(int inumber, int sub_inumber, char const *sub_name) {
             return -1;
         }
 
-        int b=0;
         /* Finds and fills the first empty entry */
         for (size_t i = 0; i < MAX_DIR_ENTRIES; i++) {
             if (dir_entry[i].d_inumber == -1) {
@@ -237,21 +236,31 @@ int find_in_dir(int inumber, char const *sub_name) {
         return -1;
     }
 
+    //...
+
+    for (int j=0; j < DIRECT_REF_BLOCKS; j++) {
+
+        /* Locates the block containing the directory's entries */
+        dir_entry_t *dir_entry =
+            (dir_entry_t *)data_block_get(inode_table[inumber].i_data_blocks[j]);
+        if (dir_entry == NULL) {
+            return -1;
+        }
+
+
+    
     /* Locates the block containing the directory's entries */
-    dir_entry_t *dir_entry =
-        (dir_entry_t *)data_block_get(inode_table[inumber].i_data_block);
-    if (dir_entry == NULL) {
-        return -1;
-    }
+    
 
     /* Iterates over the directory entries looking for one that has the target
      * name */
-    for (int i = 0; i < MAX_DIR_ENTRIES; i++)
-        if ((dir_entry[i].d_inumber != -1) &&
-            (strncmp(dir_entry[i].d_name, sub_name, MAX_FILE_NAME) == 0)) {
-            return dir_entry[i].d_inumber;
+        for (int i = 0; i < MAX_DIR_ENTRIES; i++) {
+            if ((dir_entry[i].d_inumber != -1) &&
+                (strncmp(dir_entry[i].d_name, sub_name, MAX_FILE_NAME) == 0)) {
+                return dir_entry[i].d_inumber;
+            }
         }
-
+    }
     return -1;
 }
 
@@ -319,7 +328,9 @@ int data_blocks_free(int blocks[]) {
  * Returns: pointer to the first byte of the block, NULL otherwise
  */
 void *data_block_get(int block_number) {
+    printf("data\n");
     if (!valid_block_number(block_number)) {
+        printf("invalid number\n");
         return NULL;
     }
 
