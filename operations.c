@@ -190,3 +190,44 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
 
     return (ssize_t)to_read;
 }
+
+
+int tfs_copy_to_external_fs(char const *source_path, char const *dest_path){
+
+    int inumber_source = tfs_lookup(source_path);
+    printf ("Inumber source_path: %d\n",inumber_source);
+    int inumber_dest = tfs_lookup(dest_path);
+    printf ("Inumber dest_path: %d\n",inumber_dest);
+
+    /* Scenario 1: destination file is in directory that does not exist */
+    if (!valid_pathname(dest_path)){
+        printf ("Scenario1 : dest_path in directory that doesn´t exist \n");
+        return -1;
+    }
+
+    /*
+    if (find_in_dir(ROOT_DIR_INUM,dest_path) == -1){
+        return -1;
+    }
+    */
+
+    /*
+    if (tfs_lookup(dest_path) == -1){
+        printf ("Scenario1 : dest_path doesn´t exist \n");
+        return -1;
+    }
+    */
+
+    /* Scenario 3 : dest_path does not exit , then the fuction must create it */
+
+    /* Scenario 2: source file does not exist */
+    if (tfs_lookup(source_path) == -1 ) {
+        printf ("Scenario2 : source_path doesn´t exist \n");
+        return -1;
+    }
+
+    return 0;
+    
+
+
+}
