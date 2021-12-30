@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 int tfs_init() {
     state_init();
@@ -207,40 +208,44 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
 
 int tfs_copy_to_external_fs(char const *source_path, char const *dest_path){
 
-    int inumber_source = tfs_lookup(source_path);
-    printf ("Inumber source_path: %d\n",inumber_source);
-    int inumber_dest = tfs_lookup(dest_path);
-    printf ("Inumber dest_path: %d\n",inumber_dest);
-
     /* Scenario 1: destination file is in directory that does not exist */
-    if (!valid_pathname(dest_path)){
-        printf ("Scenario1 : dest_path in directory that doesn´t exist \n");
-        return -1;
-    }
 
-    /*
-    if (find_in_dir(ROOT_DIR_INUM,dest_path) == -1){
-        return -1;
+    if (dest_path[0] == '/' || dest_path[0] == '.') {
+        if (strlen(dest_path) > 2) {
+            printf("Scenario #1 - OK \n");
+            return -1;
+        }        
     }
-    */
-
-    /*
-    if (tfs_lookup(dest_path) == -1){
-        printf ("Scenario1 : dest_path doesn´t exist \n");
-        return -1;
-    }
-    */
-
-    /* Scenario 3 : dest_path does not exit , then the fuction must create it */
 
     /* Scenario 2: source file does not exist */
-    if (tfs_lookup(source_path) == -1 ) {
-        printf ("Scenario2 : source_path doesn´t exist \n");
+
+    if(tfs_open(source_path,TFS_O_APPEND) == -1) {
+        printf("Scenario #2 - OK \n");
         return -1;
     }
+
+    // Determine the data to copy
+
+    char data[SIZE];
+
+    int fh_source = tfs_open(source_path,0);
+    assert(fh_source != -1);
+
+    tfs_read(fh_source,data,SIZE);
+
+    //printf("Output: %s\n",data);
+
+    // Case 1 - File with dest_path, exist
+    // Case 2 - File with dest_path does not exist
+    // In both cases we start with a empty "new" file
+    
+    FILE *fp;
+    fp = fopen(dest_path, "w");
+    // write in the File dest_path
+    fwrite(data,sizeof(char),sizeof(data),fp);
+    fclose(fp);
+
 
     return 0;
     
-
-
 }
