@@ -182,26 +182,125 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     if (to_read > len) {
         to_read = len;
     }
-  
-    int i=0, read=0;
-    if (to_read > 0) {
-        while(i < DIRECT_REF_BLOCKS && read != 1) {
-            i = (file->of_offset/1024) % 10;
+    
+    printf("To read value = %ld\n",to_read);
 
+    int i=0;
+    if (to_read > 0) {
+
+        printf("Current file->of_offset: %ld\n",file->of_offset);
+
+        //  Case write_10_blocks_simple
+        //  1KB is a multiple of SIZE=256    
+
+        if (1024 % to_read == 0) {
+
+            // Determine the block to read from:
+            // In this case it has to go next block to read
+
+            // Base case
+            if((file->of_offset % 1024) == 0) {
+                i = (int)file->of_offset / 1024;
+            }
+
+            // Case bigger 1024
+            if(file->of_offset > 1024) {
+                // Case multiply 1024
+                if((file->of_offset % 1024) == 0) {
+                    i = (int)file->of_offset / 1024;
+                }
+                // Case not mul 1024 but bigger 
+                else {
+                    i = (int)file->of_offset / 1024;
+                }
+
+            }
+
+            //printf ("Current i value: %d\n",i);
+     
+            printf("inode->i_data_blocks[i] %d\n",inode->i_data_blocks[i]);
             void *block = data_block_get(inode->i_data_blocks[i]);
+
             if (block == NULL) {
                 return -1;
             }
 
             /* Perform the actual read */
             memcpy(buffer, block + file->of_offset, to_read);
-            read = 1;
+
             /* The offset associated with the file handle is
             * incremented accordingly */
             file->of_offset += to_read;
+            printf (" # %ld\n",file->of_offset);
         }
-    }
+        
+        //  Case write_10_blocks_spill
+        //  1KB is NOT a multiple of SIZE=256
+        
+        else {
 
+            // Determine the block to read from:
+            // In this case it has to go next block to read
+
+            // Base case
+            if((file->of_offset % 1024) == 0) {
+                i = (int)file->of_offset / 1024;
+            }
+
+            // Case bigger 1024
+            if(file->of_offset > 1024) {
+                // Case multiply 1024
+                if((file->of_offset % 1024) == 0) {
+                    i = (int)file->of_offset / 1024;
+                }
+                // Case not mul 1024 but bigger 
+                else {
+                    i = (int)file->of_offset / 1024;
+                }
+
+            }
+
+            printf ("Current i value: %d\n",i);
+     
+            printf("inode->i_data_blocks[i] %d\n",inode->i_data_blocks[i]);
+            void *block = data_block_get(inode->i_data_blocks[i]);
+
+            if (block == NULL) {
+                return -1;
+            }
+
+            // Case when it cannot perform the read
+            if ((file->of_offset + to_read) > (i+1) * 1024) {
+                int left_to_read = (int)(file->of_offset + to_read) - (i+1)*1024;
+                printf ("Value left to read: %d\n",left_to_read);
+                int to_read_left = (int)to_read - left_to_read;
+                printf("Value to write: %d \n", to_read_left);
+                /* Perform the actual read */
+                memcpy(buffer, block + (size_t)to_read_left, to_read);
+                /* The offset associated with the file handle is
+                * incremented accordingly */
+                file->of_offset += (size_t)to_read_left;
+                to_read += (size_t)left_to_read;
+
+            }
+
+            else {
+
+                /* Perform the actual read */
+                memcpy(buffer, block + file->of_offset, to_read);
+                /* The offset associated with the file handle is
+                * incremented accordingly */
+                file->of_offset += to_read;
+            }
+
+            printf (" # %ld\n",file->of_offset);
+
+            //printf ("CASE 2 \n");
+            //return -1;
+        }
+
+    }
+    
     return (ssize_t)to_read;
 }
 
