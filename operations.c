@@ -252,7 +252,7 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
             // Case write_10_blocks_simple
             // 1KB is multiple of SIZE
 
-            printf("==  1024\n");
+            //printf("==  1024\n");
 
             //printf("i-value: %d\n",i);
             printf("inode->i_data_blocks[i] %d\n",inode->i_data_blocks[i]);
