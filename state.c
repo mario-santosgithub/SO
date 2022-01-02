@@ -132,6 +132,10 @@ int inode_create(inode_type n_type) {
                 for(int i=0; i < DIRECT_REF_BLOCKS; i++) { 
                     inode_table[inumber].i_data_blocks[i] = -1;
                 }
+                for(int i=0; i < INDIRECT_BLOCKS; i++) {
+                    inode_table[inumber].indirect_blocks[i] = -1;
+                }
+                inode_table[inumber].indirect_block = -1;
             }
             return inumber;
         }
@@ -158,6 +162,9 @@ int inode_delete(int inumber) {
 
     if (inode_table[inumber].i_size > 0) { // .... antes recebia um bloco e agr um vetor, data_blocks_free adicionada
         if (data_blocks_free(inode_table[inumber].i_data_blocks) == -1) {
+            return -1;
+        }
+        if (data_blocks_free(inode_table[inumber].indirect_blocks) == -1) {
             return -1;
         }
     }
@@ -220,6 +227,25 @@ int add_dir_entry(int inumber, int sub_inumber, char const *sub_name) {
             }
         }
     }
+
+    for(int j=0; j < INDIRECT_BLOCKS; j++) {
+        /* Locates the block containing the directory's entries */
+        dir_entry_t *dir_entry =
+            (dir_entry_t *)data_block_get(inode_table[inumber].indirect_blocks[j]);
+        if (dir_entry == NULL) {
+            return -1;
+        }
+
+        /* Finds and fills the first empty entry */
+        for (size_t i = 0; i < MAX_DIR_ENTRIES; i++) {
+            if (dir_entry[i].d_inumber == -1) {
+                dir_entry[i].d_inumber = sub_inumber;
+                strncpy(dir_entry[i].d_name, sub_name, MAX_FILE_NAME - 1);
+                dir_entry[i].d_name[MAX_FILE_NAME - 1] = 0;
+                return 0;
+            }
+        }
+    }
     return -1;
 }
 
@@ -246,11 +272,7 @@ int find_in_dir(int inumber, char const *sub_name) {
         if (dir_entry == NULL) {
             return -1;
         }
-
-
-    
     /* Locates the block containing the directory's entries */
-    
 
     /* Iterates over the directory entries looking for one that has the target
      * name */
@@ -261,6 +283,27 @@ int find_in_dir(int inumber, char const *sub_name) {
             }
         }
     }
+
+    for (int j=0; j < INDIRECT_BLOCKS; j++) {
+
+        /* Locates the block containing the directory's entries */
+        dir_entry_t *dir_entry =
+            (dir_entry_t *)data_block_get(inode_table[inumber].indirect_blocks[j]);
+        if (dir_entry == NULL) {
+            return -1;
+        }
+    /* Locates the block containing the directory's entries */
+
+    /* Iterates over the directory entries looking for one that has the target
+     * name */
+        for (int i = 0; i < MAX_DIR_ENTRIES; i++) {
+            if ((dir_entry[i].d_inumber != -1) &&
+                (strncmp(dir_entry[i].d_name, sub_name, MAX_FILE_NAME) == 0)) {
+                return dir_entry[i].d_inumber;
+            }
+        }
+    }
+
     return -1;
 }
 
@@ -328,7 +371,7 @@ int data_blocks_free(int blocks[]) {
  * Returns: pointer to the first byte of the block, NULL otherwise
  */
 void *data_block_get(int block_number) {
-    printf("data\n");
+    printf("block number: %d\n", block_number); 
     if (!valid_block_number(block_number)) {
         printf("invalid number\n");
         return NULL;
