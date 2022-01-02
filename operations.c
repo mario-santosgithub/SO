@@ -127,71 +127,69 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
     /* Determine how many bytes to write */
     if (to_write + file->of_offset > BLOCK_SIZE*DIRECT_REF_BLOCKS) {
         to_write = BLOCK_SIZE*DIRECT_REF_BLOCKS - file->of_offset;
+        // Indirect Write
+        printf("Indirect write phase\n");
     }
 
-    int i=0, added = 0;
+    int i=0;
     size_t aux = 0;
     if (to_write > 0) {
 
-        // Direct Write
-        while (i < DIRECT_REF_BLOCKS && added != 1) {
+        i = (int)(inode->i_size/1024) % 10;
+        printf("i-value: %d\n",i+1);
 
-            i = (int)(inode->i_size/1024) % 10;
+        // Case write_10_blocks_simple
+        // 1KB is multiple of SIZE
 
-            // Case write_10_blocks_simple
-            // 1KB is multiple of SIZE
+        if ((inode->i_size % 1024) == 0) { 
+            printf("==  1024\n");
+            /* If empty file, allocate new block */
+            inode->i_data_blocks[i] = data_block_alloc();
+        }
 
-            if ((inode->i_size % 1024) == 0) { 
-                printf("==  1024\n");
-                /* If empty file, allocate new block */
-                inode->i_data_blocks[i] = data_block_alloc();
-            }
+        // Case write_10_blocks_spill
+        // 1KB is NOT a multiple of SIZE
 
-            // Case write_10_blocks_spill
-            // 1KB is NOT a multiple of SIZE
+        else if (inode->i_size + to_write > 1024*(i+1)) {
+            printf("> 1024\n");
+            aux = (size_t)(1024*(i+1)) - inode->i_size; // to write in current block
 
-            else if (inode->i_size + to_write > 1024*(i+1)) {
-                printf("> 1024\n");
-                aux = (size_t)(1024*(i+1)) - inode->i_size; // to write in current block
+            //perform the write
+            void *block = data_block_get(inode->i_data_blocks[i]); 
+            printf("aux: %ld\n", aux);
+            memcpy(block + file->of_offset, buffer, aux);
 
-                //perform the write
-                void *block = data_block_get(inode->i_data_blocks[i]); 
-                printf("aux: %ld\n", aux);
-                memcpy(block + file->of_offset, buffer, aux);
-
-                // File offset update
-                file->of_offset += aux;
-                if (file->of_offset > inode->i_size) {
-                    inode->i_size = file->of_offset;
-                }
-                printf (" # aux %ld\n",file->of_offset);
-
-                to_write = to_write - aux; // only write to the next block
-                printf("to_write after: %ld\n", to_write);
-                i++; // one block was completed, so inc i
-                inode->i_data_blocks[i] = data_block_alloc(); // alloc space for the new block
-
-            }
-
-            //printf("i-value: %d\n",i);
-            printf("inode->i_data_blocks[i] %d\n",inode->i_data_blocks[i]);
-            void *block = data_block_get(inode->i_data_blocks[i]);
-
-            if (block == NULL) {
-                return -1;
-            }
-        
-            /* Perform the actual write */
-            memcpy(block + file->of_offset, buffer, to_write);
-            added = 1;
-
-            /* The offset associated with the file handle is
-            * incremented accordingly */
-            file->of_offset += to_write;
+            // File offset update
+            file->of_offset += aux;
             if (file->of_offset > inode->i_size) {
                 inode->i_size = file->of_offset;
             }
+            printf (" # aux %ld\n",file->of_offset);
+
+            to_write = to_write - aux; // only write to the next block
+            printf("to_write after: %ld\n", to_write);
+            i++; // one block was completed, so inc i
+            inode->i_data_blocks[i] = data_block_alloc(); // alloc space for the new block
+
         }
+
+        //printf("i-value: %d\n",i);
+        printf("inode->i_data_blocks[i] %d\n",inode->i_data_blocks[i]);
+        void *block = data_block_get(inode->i_data_blocks[i]);
+
+        if (block == NULL) {
+            return -1;
+        }
+        
+        /* Perform the actual write */
+        memcpy(block + file->of_offset, buffer, to_write);
+
+        /* The offset associated with the file handle is
+        * incremented accordingly */
+        file->of_offset += to_write;
+        if (file->of_offset > inode->i_size) {
+            inode->i_size = file->of_offset;
+        } 
     }
 
     printf (" # %ld\n",file->of_offset);
@@ -216,59 +214,58 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     size_t to_read = inode->i_size - file->of_offset;
     if (to_read > len) {
         to_read = len;
+        // Indirect read
+        printf("Indirect read phase\n");
     }
 
-    int i=0, read = 0;
+    int i=0;
     size_t aux = 0;
     if (to_read > 0) {
 
-        // Direct Read
-        while (i < DIRECT_REF_BLOCKS && read != 1) {
+        i = (int)(file->of_offset/1024) % 10;
+         printf("i-value: %d\n",i+1);
 
-            i = (int)(file->of_offset/1024) % 10;
-
-            // Case write_10_blocks_simple
-            // 1KB is NOT multiple of SIZE
+        // Case write_10_blocks_simple
+        // 1KB is NOT multiple of SIZE
     
-            if  (file->of_offset + to_read > 1024*(i+1) ) {
-                printf("> 1024\n");
-                aux = (size_t)(1024*(i+1)) - file->of_offset;
+        if  (file->of_offset + to_read > 1024*(i+1) ) {
+            printf("> 1024\n");
+            aux = (size_t)(1024*(i+1)) - file->of_offset;
 
-                //perform the write
-                void *block = data_block_get(inode->i_data_blocks[i]);
-                printf("aux: %ld\n", aux);
-                memcpy(buffer, block + file->of_offset, aux);
-                
-                // File offset update
-                file->of_offset += aux;
-                printf (" # aux %ld\n",file->of_offset);
-
-                to_read = to_read - aux;
-                printf("to_read after: %ld\n", to_read);
-
-                i++;
-            }
-
-            // Case write_10_blocks_simple
-            // 1KB is multiple of SIZE
-
-            //printf("==  1024\n");
-
-            //printf("i-value: %d\n",i);
-            printf("inode->i_data_blocks[i] %d\n",inode->i_data_blocks[i]);
-
+            //perform the write
             void *block = data_block_get(inode->i_data_blocks[i]);
-            if (block == NULL) {
-                return -1;
-            }
+            printf("aux: %ld\n", aux);
+            memcpy(buffer, block + file->of_offset, aux);
+                
+            // File offset update
+            file->of_offset += aux;
+            printf (" # aux %ld\n",file->of_offset);
 
-            /* Perform the actual read */
-            memcpy(buffer, block + file->of_offset, to_read);
-            read = 1;
-            /* The offset associated with the file handle is
-            * incremented accordingly */
-            file->of_offset += to_read;
+            to_read = to_read - aux;
+            printf("to_read after: %ld\n", to_read);
+
+            i++;
         }
+
+        // Case write_10_blocks_simple
+        // 1KB is multiple of SIZE
+
+        //printf("==  1024\n");
+
+        //printf("i-value: %d\n",i);
+        printf("inode->i_data_blocks[i] %d\n",inode->i_data_blocks[i]);
+
+        void *block = data_block_get(inode->i_data_blocks[i]);
+        if (block == NULL) {
+            return -1;
+        }
+
+        /* Perform the actual read */
+        memcpy(buffer, block + file->of_offset, to_read);
+
+        /* The offset associated with the file handle is
+        * incremented accordingly */
+        file->of_offset += to_read;    
     }
     
     printf (" # %ld\n",file->of_offset);
