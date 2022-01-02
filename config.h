@@ -1,6 +1,9 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#define DIRECT_REF_BLOCKS (10)
+#define INDIRECT_BLOCKS (256)
+
 /* FS root inode number */
 #define ROOT_DIR_INUM (0)
 
