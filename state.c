@@ -112,9 +112,10 @@ int inode_create(inode_type n_type) {
 
                 inode_table[inumber].i_size = BLOCK_SIZE;
 
-                for(int i=0; i < DIRECT_REF_BLOCKS; i++) {
+                for (int i=0; i < DIRECT_BLOCKS; i++) {
                     inode_table[inumber].direct_blocks[i] = b;
                 }
+                
 
                 dir_entry_t *dir_entry = (dir_entry_t *)data_block_get(b);
                 if (dir_entry == NULL) {
@@ -125,24 +126,13 @@ int inode_create(inode_type n_type) {
                 for (size_t i = 0; i < MAX_DIR_ENTRIES; i++) {
                     dir_entry[i].d_inumber = -1;
                 }
-
             } else {
                 /* In case of a new file, simply sets its size to 0 */
                 inode_table[inumber].i_size = 0;
-            
-                // Direct Reference Blocks
-                for(int i=0; i < DIRECT_REF_BLOCKS; i++) { 
+
+                for (int i=0; i < DIRECT_BLOCKS; i++) {
                     inode_table[inumber].direct_blocks[i] = -1;
                 }
-
-                // Indirect Reference blocks
-                inode_table[inumber].indirect_block = data_block_alloc();
-                int* indirect_block_p = data_block_get(inode_table[inumber].indirect_block);
-
-                for (int i = 0; i < INDIRECT_BLOCKS; i++){
-                    indirect_block_p[i] = -1;
-                }
-
             }
             return inumber;
         }
@@ -167,16 +157,9 @@ int inode_delete(int inumber) {
 
     freeinode_ts[inumber] = FREE;
 
-    if (inode_table[inumber].i_size > 0) { 
+    if (inode_table[inumber].i_size > 0) {
         if (data_blocks_free(inode_table[inumber].direct_blocks) == -1) {
             return -1;
-        }
-        
-        int* indirect_block_p = data_block_get(inode_table[inumber].indirect_block);
-        for (int i = 0; i < INDIRECT_BLOCKS; i++){
-            if(data_block_free(indirect_block_p[i] == -1)) {
-                return -1;
-            }
         }
     }
 
@@ -220,9 +203,7 @@ int add_dir_entry(int inumber, int sub_inumber, char const *sub_name) {
         return -1;
     }
 
-    // Direct reference blocks
-
-    for(int j=0; j < DIRECT_REF_BLOCKS; j++) {
+    for (int j=0; j < DIRECT_BLOCKS; j++) { 
         /* Locates the block containing the directory's entries */
         dir_entry_t *dir_entry =
             (dir_entry_t *)data_block_get(inode_table[inumber].direct_blocks[j]);
@@ -241,28 +222,6 @@ int add_dir_entry(int inumber, int sub_inumber, char const *sub_name) {
         }
     }
 
-    // Indirect blocks
-
-    int* indirect_block_p = data_block_get(inode_table[inumber].indirect_block);
-
-    for(int j=0; j < INDIRECT_BLOCKS; j++) {
-        /* Locates the block containing the directory's entries */
-        dir_entry_t *dir_entry =
-            (dir_entry_t *)data_block_get(indirect_block_p[j]);
-        if (dir_entry == NULL) {
-            return -1;
-        }
-
-        /* Finds and fills the first empty entry */
-        for (size_t i = 0; i < MAX_DIR_ENTRIES; i++) {
-            if (dir_entry[i].d_inumber == -1) {
-                dir_entry[i].d_inumber = sub_inumber;
-                strncpy(dir_entry[i].d_name, sub_name, MAX_FILE_NAME - 1);
-                dir_entry[i].d_name[MAX_FILE_NAME - 1] = 0;
-                return 0;
-            }
-        }
-    }
     return -1;
 }
 
@@ -279,20 +238,16 @@ int find_in_dir(int inumber, char const *sub_name) {
         return -1;
     }
 
-    // Direct reference blocks
-
-    for (int j=0; j < DIRECT_REF_BLOCKS; j++) {
-
+    for (int j=0; j < DIRECT_BLOCKS; j++) {
         /* Locates the block containing the directory's entries */
         dir_entry_t *dir_entry =
             (dir_entry_t *)data_block_get(inode_table[inumber].direct_blocks[j]);
         if (dir_entry == NULL) {
             return -1;
         }
-    /* Locates the block containing the directory's entries */
 
-    /* Iterates over the directory entries looking for one that has the target
-     * name */
+        /* Iterates over the directory entries looking for one that has the target
+        * name */
         for (int i = 0; i < MAX_DIR_ENTRIES; i++) {
             if ((dir_entry[i].d_inumber != -1) &&
                 (strncmp(dir_entry[i].d_name, sub_name, MAX_FILE_NAME) == 0)) {
@@ -300,30 +255,6 @@ int find_in_dir(int inumber, char const *sub_name) {
             }
         }
     }
-
-    // Direct reference blocks
-    
-    int* indirect_block_p = data_block_get(inode_table[inumber].indirect_block);
-    for (int j=0; j < INDIRECT_BLOCKS; j++) {
-
-        /* Locates the block containing the directory's entries */
-        dir_entry_t *dir_entry =
-            (dir_entry_t *)data_block_get(indirect_block_p[j]);
-        if (dir_entry == NULL) {
-            return -1;
-        }
-    /* Locates the block containing the directory's entries */
-
-    /* Iterates over the directory entries looking for one that has the target
-     * name */
-        for (int i = 0; i < MAX_DIR_ENTRIES; i++) {
-            if ((dir_entry[i].d_inumber != -1) &&
-                (strncmp(dir_entry[i].d_name, sub_name, MAX_FILE_NAME) == 0)) {
-                return dir_entry[i].d_inumber;
-            }
-        }
-    }
-
     return -1;
 }
 
@@ -360,7 +291,7 @@ int data_block_free(int block_number) {
     return 0;
 }
 
-//.......
+
 /* Frees all i-node blocks
  * Input
  *  - the array with the i-node blocks
@@ -368,20 +299,18 @@ int data_block_free(int block_number) {
  */
 int data_blocks_free(int blocks[]) {
     
-    for(int i=0; i < DIRECT_REF_BLOCKS; i++) {
+    for(int i=0; i < DIRECT_BLOCKS; i++) {
         if (!valid_block_number(blocks[i])) {
             return -1;
         }
     }
     
-    for(int i=0; i < DIRECT_REF_BLOCKS; i++) {
+    for(int i=0; i < DIRECT_BLOCKS; i++) {
         insert_delay(); // simulate storage access delay to free_blocks
         free_blocks[blocks[i]] = FREE;
     }
     return 0;
 }
-
-
 
 
 
@@ -391,15 +320,7 @@ int data_blocks_free(int blocks[]) {
  * Returns: pointer to the first byte of the block, NULL otherwise
  */
 void *data_block_get(int block_number) {
-
-    // # Comment
-    if (block_number != 0){
-        printf("block number: %d\n", block_number);
-    }
-    // # Comment - END
-
     if (!valid_block_number(block_number)) {
-        printf("invalid number\n");
         return NULL;
     }
 
