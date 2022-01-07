@@ -1,9 +1,6 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define DIRECT_REF_BLOCKS (10)
-#define INDIRECT_BLOCKS (256)
-
 /* FS root inode number */
 #define ROOT_DIR_INUM (0)
 
@@ -12,6 +9,10 @@
 #define INODE_TABLE_SIZE (50)
 #define MAX_OPEN_FILES (20)
 #define MAX_FILE_NAME (40)
+
+#define DIRECT_BLOCKS (10)
+#define INDIRECT_BLOCKS (256) // mudar isto para BLOCK_SIZE / sizeof(int)
+#define SIZE (256)
 
 #define DELAY (5000)
 
