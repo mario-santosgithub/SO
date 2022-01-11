@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
-
+#include <pthread.h>
 
 /*
  * Directory entry
@@ -26,9 +26,15 @@ typedef struct {
     size_t i_size;
     int direct_blocks[DIRECT_REF_BLOCKS];
     int indirect_block;
+    pthread_rwlock_t rwlocks;
 
     /* in a real FS, more fields would exist here */
 } inode_t;
+
+// Lock
+
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
 
 typedef enum { FREE = 0, TAKEN = 1 } allocation_state_t;
 
