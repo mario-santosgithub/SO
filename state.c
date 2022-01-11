@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <pthread.h>
 
 /* Persistent FS state  (in reality, it should be maintained in secondary
  * memory; for simplicity, this project maintains it in primary memory) */
@@ -90,22 +91,25 @@ void state_destroy() { /* nothing to do */
  */
 int inode_create(inode_type n_type) {
     for (int inumber = 0; inumber < INODE_TABLE_SIZE; inumber++) {
+        
         if ((inumber * (int) sizeof(allocation_state_t) % BLOCK_SIZE) == 0) {
             insert_delay(); // simulate storage access delay (to freeinode_ts)
         }
 
+        pthread_mutex_lock(&mutex); //Lock1
         /* Finds first free entry in i-node table */
         if (freeinode_ts[inumber] == FREE) {
+     
             /* Found a free entry, so takes it for the new i-node*/
             freeinode_ts[inumber] = TAKEN;
             insert_delay(); // simulate storage access delay (to i-node)
+            pthread_mutex_unlock(&mutex); // Unlock1
+
             inode_table[inumber].i_node_type = n_type;
 
             if (n_type == T_DIRECTORY) {
                 /* Initializes directory (filling its block with empty
                  * entries, labeled with inumber==-1) */
-
-                //pthread_mutex_lock(&inode_table[inumber].mutex);
                 
                 int b = data_block_alloc();
 
@@ -114,12 +118,8 @@ int inode_create(inode_type n_type) {
                     return -1;
                 }
 
-                // Lock 
-                // inode->i_size
-                // inode->direct_reference blocks data allocation
-
-
                 inode_table[inumber].i_size = BLOCK_SIZE;
+                
 
                 for(int i=0; i < DIRECT_REF_BLOCKS; i++) {
                     inode_table[inumber].direct_blocks[i] = b;
@@ -135,40 +135,27 @@ int inode_create(inode_type n_type) {
                     dir_entry[i].d_inumber = -1;
                 }
 
-                //pthread_mutex_unlock(&inode_table[inumber].mutex);
-
             } else {
+
+                pthread_mutex_unlock(&mutex); // Unlock1
+
                 /* In case of a new file, simply sets its size to 0 */
                 
-                //pthread_mutex_lock(&inode_table[inumber].mutex);
                 inode_table[inumber].i_size = 0;
-            
+                
                 // Direct Reference Blocks
                 for(int i=0; i < DIRECT_REF_BLOCKS; i++) { 
                     inode_table[inumber].direct_blocks[i] = -1;
                 }
 
                 inode_table[inumber].indirect_block = -1;
-
-                /*
-                // Indirect Reference blocks
-                inode_table[inumber].indirect_block = data_block_alloc();
-                int* indirect_block_p = data_block_get(inode_table[inumber].indirect_block);
-                for (int i = 0; i < INDIRECT_BLOCKS; i++){
-                    indirect_block_p[i] = -1;
-                }
-                */
-
-                
-
-                //pthread_mutex_unlock(&inode_table[inumber].mutex);
-
             }
             return inumber;
         }
     }
     return -1;
 }
+
 
 /*
  * Deletes the i-node.
@@ -181,14 +168,18 @@ int inode_delete(int inumber) {
     insert_delay();
     insert_delay();
 
+    pthread_mutex_lock(&mutex);
+
     if (!valid_inumber(inumber) || freeinode_ts[inumber] == FREE) {
         return -1;
     }
 
     freeinode_ts[inumber] = FREE;
 
-    //pthread_mutex_lock(&inode_table[inumber].mutex);
+    pthread_mutex_unlock(&mutex);
+
     if (inode_table[inumber].i_size > 0) { 
+        pthread_mutex_lock(&mutex);
         if (data_blocks_free(inode_table[inumber].direct_blocks) == -1) {
             return -1;
         }
@@ -199,8 +190,8 @@ int inode_delete(int inumber) {
                 return -1;
             }
         }
+        pthread_mutex_unlock(&mutex);
     }
-    //pthread_mutex_unlock(&inode_table[inumber].mutex);
 
     return 0;
 }
@@ -253,6 +244,8 @@ int add_dir_entry(int inumber, int sub_inumber, char const *sub_name) {
             return -1;
         }
 
+        pthread_mutex_lock(&mutex);
+
         /* Finds and fills the first empty entry */
         for (size_t i = 0; i < MAX_DIR_ENTRIES; i++) {
             if (dir_entry[i].d_inumber == -1) {
@@ -262,7 +255,9 @@ int add_dir_entry(int inumber, int sub_inumber, char const *sub_name) {
                 return 0;
             }
         }
-        //pthread_mutex_unlock(&inode_table[inumber].mutex);
+
+        pthread_mutex_unlock(&mutex);
+        
     }
 
     // Indirect blocks
@@ -301,10 +296,13 @@ int add_dir_entry(int inumber, int sub_inumber, char const *sub_name) {
  */
 int find_in_dir(int inumber, char const *sub_name) {
     insert_delay(); // simulate storage access delay to i-node with inumber
+
+    pthread_mutex_lock(&mutex);
     if (!valid_inumber(inumber) ||
         inode_table[inumber].i_node_type != T_DIRECTORY) {
         return -1;
     }
+    pthread_mutex_unlock(&mutex);
 
     // Direct reference blocks
     /* Locates the block containing the directory's entries */
@@ -314,7 +312,7 @@ int find_in_dir(int inumber, char const *sub_name) {
 
     for (int j=0; j < DIRECT_REF_BLOCKS; j++) {
 
-        //pthread_mutex_lock(&inode_table[inumber].mutex);
+        pthread_mutex_lock(&mutex);
         /* Locates the block containing the directory's entries */
         dir_entry_t *dir_entry =
             (dir_entry_t *)data_block_get(inode_table[inumber].direct_blocks[j]);
@@ -328,8 +326,7 @@ int find_in_dir(int inumber, char const *sub_name) {
                 return dir_entry[i].d_inumber;
             }
         }
-
-        //pthread_mutex_unlock(&inode_table[inumber].mutex);
+        pthread_mutex_unlock(&mutex);
 
     }
 
@@ -341,7 +338,7 @@ int find_in_dir(int inumber, char const *sub_name) {
     int* indirect_block_p = data_block_get(inode_table[inumber].indirect_block);
     for (int j=0; j < INDIRECT_BLOCKS; j++) {
 
-        //pthread_mutex_lock(&inode_table[inumber].mutex);
+        pthread_mutex_lock(&mutex);
 
         dir_entry_t *dir_entry =
             (dir_entry_t *)data_block_get(indirect_block_p[j]);
@@ -356,7 +353,7 @@ int find_in_dir(int inumber, char const *sub_name) {
             }
         }
 
-        //pthread_mutex_unlock(&inode_table[inumber].mutex);
+        pthread_mutex_unlock(&mutex);
     }
 
     return -1;
@@ -372,10 +369,12 @@ int data_block_alloc() {
             insert_delay(); // simulate storage access delay to free_blocks
         }
 
+        pthread_mutex_lock(&mutex);
         if (free_blocks[i] == FREE) {
             free_blocks[i] = TAKEN;
             return i;
         }
+        pthread_mutex_unlock(&mutex);
     }
     return -1;
 }
@@ -391,7 +390,10 @@ int data_block_free(int block_number) {
     }
 
     insert_delay(); // simulate storage access delay to free_blocks
+    pthread_mutex_lock(&mutex);
     free_blocks[block_number] = FREE;
+    pthread_mutex_unlock(&mutex);
+
     return 0;
 }
 
@@ -408,11 +410,15 @@ int data_blocks_free(int blocks[]) {
             return -1;
         }
     }
-    
+    pthread_mutex_lock(&mutex);
+
     for(int i=0; i < DIRECT_REF_BLOCKS; i++) {
         insert_delay(); // simulate storage access delay to free_blocks
         free_blocks[blocks[i]] = FREE;
     }
+
+    pthread_mutex_unlock(&mutex);
+
     return 0;
 }
 
