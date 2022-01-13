@@ -19,6 +19,9 @@ int tfs_init() {
         printf("tfs_init LEAVE\n");
         return -1;
     }
+
+    //pthread_mutex_init(&mutex_file_read,NULL);
+    //pthread_mutex_init(&mutex_file_write,NULL);
     printf("tfs_init LEAVE\n");
     return 0;
 }
@@ -58,6 +61,7 @@ int tfs_open(char const *name, int flags) {
 
     inum = tfs_lookup(name); // Locked
 
+
     
     if (inum >= 0) {
         
@@ -69,8 +73,8 @@ int tfs_open(char const *name, int flags) {
             return -1;
         }
 
-        pthread_rwlock_wrlock(&inode->rwlock);
 
+        pthread_rwlock_wrlock(&inode->rwlock);
         /* Trucate (if requested) */
         if (flags & TFS_O_TRUNC) {
             if (inode->i_size > 0) {
@@ -91,6 +95,7 @@ int tfs_open(char const *name, int flags) {
         } else {
             offset = 0;
         }
+
         pthread_rwlock_unlock(&inode->rwlock);
     
     } else if (flags & TFS_O_CREAT) {
@@ -143,7 +148,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
     if (inode == NULL) {
         return -1;
     }
-
+    pthread_mutex_lock(&file->mutex);
     /* Determine how many bytes to write */
     if (to_write + file->of_offset > BLOCK_SIZE*DIRECT_REF_BLOCKS + BLOCK_SIZE*INDIRECT_BLOCKS) {
         to_write = BLOCK_SIZE*DIRECT_REF_BLOCKS - file->of_offset;
@@ -157,8 +162,9 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
 
     size_t aux = 0, written = 0;
     if (to_write > 0) {
+        //pthread_mutex_lock(&file->mutex);
+        pthread_rwlock_wrlock(&inode->rwlock);
         while (to_write != 0) {
-            pthread_rwlock_wrlock(&inode->rwlock);
             if (inode->i_size < BLOCK_SIZE*DIRECT_REF_BLOCKS) {
 
                 int i = (int)(inode->i_size/BLOCK_SIZE) % 10;
@@ -179,6 +185,8 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
                 void *block = data_block_get(inode->direct_blocks[i]);
 
                 if (block == NULL) {
+                    pthread_rwlock_unlock(&inode->rwlock);
+                    pthread_mutex_unlock(&file->mutex);
                     return -1;
                 }
                 
@@ -222,6 +230,8 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
 
                 void *block = data_block_get(indirect_blocks_p[i]);
                 if (block == NULL) {
+                    pthread_rwlock_unlock(&inode->rwlock);
+                    pthread_mutex_unlock(&file->mutex);
                     return -1;
                 }
                 
@@ -234,10 +244,11 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
                 if (file->of_offset > inode->i_size) {
                     inode->i_size = file->of_offset;
                 }
-            }
-            pthread_rwlock_unlock(&inode->rwlock);
+            }   
         }
+        pthread_rwlock_unlock(&inode->rwlock);
     }
+    pthread_mutex_unlock(&file->mutex);
     return (ssize_t)to_write + (ssize_t)written;
 }
 
@@ -255,6 +266,8 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
         return -1;
     }
 
+    pthread_mutex_lock(&file->mutex);
+    pthread_rwlock_rdlock(&inode->rwlock);
     /* Determine how many bytes to read */
     size_t to_read = inode->i_size - file->of_offset;
     if (to_read > len) {
@@ -267,7 +280,6 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     size_t aux = 0, read = 0;
     if (to_read > 0) {
         while ( to_read != 0) {
-            pthread_rwlock_rdlock(&inode->rwlock);
             if (file->of_offset < BLOCK_SIZE*DIRECT_REF_BLOCKS) {
                     
                 // Get inumber to read from
@@ -286,6 +298,8 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
 
                 void *block = data_block_get(inode->direct_blocks[i]);
                 if (block == NULL) {
+                    pthread_rwlock_unlock(&inode->rwlock);
+                    pthread_mutex_unlock(&file->mutex);
                     return -1;
                 }
 
@@ -311,6 +325,8 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
 
                 void *block = data_block_get(indirect_blocks_p[i]);
                 if (block == NULL) {
+                    pthread_rwlock_unlock(&inode->rwlock);
+                    pthread_mutex_unlock(&file->mutex);
                     return -1;
                 }
 
@@ -321,9 +337,9 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
                 read += aux;
             }  
         }
-        pthread_rwlock_unlock(&inode->rwlock);
     }
-    
+    pthread_rwlock_unlock(&inode->rwlock);
+    pthread_mutex_unlock(&file->mutex);    
     return (ssize_t)to_read + (ssize_t)read;
 }
 
