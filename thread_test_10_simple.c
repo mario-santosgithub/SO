@@ -5,11 +5,11 @@
 
 #define COUNT 30
 #define SIZE 256
-#define THREADS 10
+#define THREADS 50
 
 /*
    This test fills in a new file up to 8,5 blocks via multiple writes, 
-   with 10 threads, each write always targeting only 1 block of the file, 
+   with 50 threads, each write always targeting only 1 block of the file, 
    then checks if the file contents are as expected
 */
 
